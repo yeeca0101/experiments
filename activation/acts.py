@@ -1,6 +1,12 @@
 import torch
 import torch.nn as nn
 
+
+class GELU(nn.GELU):
+    def __init__(self, approximate: str = 'none') -> None:
+        super().__init__(approximate)
+
+
 # https://arxiv.org/pdf/2301.05993.pdf
 class SoftModulusQ(nn.Module):
     def __init__(self):
