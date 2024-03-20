@@ -2,17 +2,42 @@ import os
 from time import time
 import torch
 
+from model.models import replace_activations
+
+class ModelCard:
+    def __init__(self,model_class,**kwargs) -> None:
+        self.model_class = model_class
+        self.kwargs = kwargs
+        self.model = None # model_class(**kwargs)
+    
+    def update_kwargs(self,**change_kwargs):
+        self.kwargs.update(change_kwargs)
+        self.model = self.model_class(**self.kwargs)
+        
 
 class Trainer:
-    def __init__(self, model, data_loader, test_loader, criterion, optimizer, device):
-        self.model = model
+    def __init__(self, model_card:ModelCard, 
+                 data_loader, 
+                 test_loader, 
+                 criterion, 
+                 optimizer, 
+                 optimizer_kwargs,
+                 device):
+        self.modelcard = model_card
+        self.model = model_card.model
         self.data_loader = data_loader
         self.test_loader = test_loader
         self.criterion = criterion
-        self.optimizer = optimizer
+        self.optimizer_kwargs = optimizer_kwargs
+        self.optim_class = optimizer
+        self.optimizer = None # self._set_optimizer(optim_class=optimizer,**self.optimizer_kwargs)
         self.device = device
 
-        self.model.to(device)
+
+        self.results = {}
+
+    def _set_optimizer(self,**kwargs):
+        self.optimizer = self.optim_class(self.model.parameters(),**kwargs)
 
     def train(self):
         self.model.train()
@@ -72,31 +97,40 @@ class Trainer:
         minutes = int(end_t // 60)
         seconds = int(end_t % 60)
 
-        self.results = {
+        results = {
             'train_loss_history': train_loss_history,
             'test_loss_history': test_loss_history,
             'test_accuracy_history': test_accuracy_history,
             'train_test_time': f"{minutes}m{seconds}s"
         }
-        return self.results
+        return results
 
     def run_pipline(self,activation_functions,num_epochs,experiments_dir):
+        # fixed model, change activations
         os.makedirs(experiments_dir,exist_ok=True)
 
-        # build model 
-
-        # 
         for name, activation_function in activation_functions.items():
+            # model update
+            self._model_act_change(activation=activation_function)
+            self._set_optimizer(**self.optimizer_kwargs)
+            # start
             print(f"Training with {name} activation function...")
-            self.run(num_epochs=num_epochs)
+            self.model.to(self.device)
+            res = self.run(num_epochs=num_epochs)
+            self.results[name] = res
 
         self.visualize_result(experiments_dir,save=True)
+
+    def _model_act_change(self,activation):
+        self.modelcard.update_kwargs(activation=activation)
+        self.model = self.modelcard.model
 
     def visualize_result(self,experiments_dir=None,save=False):
         import matplotlib.pyplot as plt
 
         save_re = True if save and os.path.isdir(experiments_dir) else False
-
+        print(save_re)
+        
         plt.figure()
         for name, data in self.results.items():
             plt.plot(data['train_loss_history'], label=f"{name}:{data['train_test_time']}")
