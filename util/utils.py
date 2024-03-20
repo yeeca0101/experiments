@@ -1,3 +1,4 @@
+import torch.nn as nn
 import matplotlib.pyplot as plt
 
 def vis_activations(activations, x, cols):
@@ -21,3 +22,18 @@ def vis_activations(activations, x, cols):
     
     plt.tight_layout()
     plt.show()
+
+
+def get_Module_Class(return_type='dict'):
+    # 전역 네임스페이스에서 nn.Module을 상속받는 클래스 찾기
+    module_subclasses = {name: cls for name, cls in globals().items()
+                         if isinstance(cls, type) and issubclass(cls, nn.Module) and cls is not nn.Module}
+
+    # 인스턴스 생성
+    instances = {name: cls() for name, cls in module_subclasses.items()}
+
+    # 반환 타입에 따라 딕셔너리 혹은 리스트 반환
+    if return_type == 'dict':
+        return instances
+    else:
+        return list(instances.values())

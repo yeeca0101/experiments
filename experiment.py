@@ -1,5 +1,6 @@
-import torch
+import os
 from time import time
+import torch
 
 
 class Trainer:
@@ -10,6 +11,8 @@ class Trainer:
         self.criterion = criterion
         self.optimizer = optimizer
         self.device = device
+
+        self.model.to(device)
 
     def train(self):
         self.model.train()
@@ -69,9 +72,56 @@ class Trainer:
         minutes = int(end_t // 60)
         seconds = int(end_t % 60)
 
-        return {
+        self.results = {
             'train_loss_history': train_loss_history,
             'test_loss_history': test_loss_history,
             'test_accuracy_history': test_accuracy_history,
             'train_test_time': f"{minutes}m{seconds}s"
         }
+        return self.results
+
+    def run_pipline(self,activation_functions,num_epochs,experiments_dir):
+        os.makedirs(experiments_dir,exist_ok=True)
+
+        # build model 
+
+        # 
+        for name, activation_function in activation_functions.items():
+            print(f"Training with {name} activation function...")
+            self.run(num_epochs=num_epochs)
+
+        self.visualize_result(experiments_dir,save=True)
+
+    def visualize_result(self,experiments_dir=None,save=False):
+        import matplotlib.pyplot as plt
+
+        save_re = True if save and os.path.isdir(experiments_dir) else False
+
+        plt.figure()
+        for name, data in self.results.items():
+            plt.plot(data['train_loss_history'], label=f"{name}:{data['train_test_time']}")
+        plt.xlabel('Epoch')
+        plt.ylabel('Training Loss')
+        plt.legend()
+        if save_re : plt.savefig(os.path.join(experiments_dir,f'train_loss_{"_".join(self.results.keys())}.png'))
+        plt.show()
+        
+        # Plot the testing loss
+        plt.figure()
+        for name, data in self.results.items():
+            plt.plot(data['test_loss_history'], label=name)
+        plt.xlabel('Epoch')
+        plt.ylabel('Testing Loss')
+        plt.legend()
+        if save_re : plt.savefig(os.path.join(experiments_dir,f'test_loss_{"_".join(self.results.keys())}.png'))
+        plt.show()
+        
+        # Plot the testing accuracy
+        plt.figure()
+        for name, data in self.results.items():
+            plt.plot(data['test_accuracy_history'], label=name)
+        plt.xlabel('Epoch')
+        plt.ylabel('Testing Accuracy')
+        plt.legend()
+        if save_re : plt.savefig(os.path.join(experiments_dir,f'test_acc_{"_".join(self.results.keys())}.png'))
+        plt.show()

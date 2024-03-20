@@ -19,6 +19,9 @@ class CIFAR10(datasets.CIFAR10):
         curr_dir=  get_current_script_directory()
         root=os.path.join(curr_dir,'dataset/CIFAR10')
         download=False
+        if transform is None:
+            import torchvision.transforms as transforms
+            transform = transforms.ToTensor()
 
         super().__init__(root, train, transform, target_transform, download)
 
@@ -27,6 +30,9 @@ class MNIST(datasets.MNIST):
         curr_dir=  get_current_script_directory()
         root=os.path.join(curr_dir,'dataset/MNIST')
         download=False
+        if transform is None:
+            import torchvision.transforms as transforms
+            transform = transforms.ToTensor()
 
         super().__init__(root, train, transform, target_transform, download)
 
