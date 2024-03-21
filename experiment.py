@@ -9,10 +9,16 @@ class ModelCard:
         self.model_class = model_class
         self.kwargs = kwargs
         self.model = None # model_class(**kwargs)
-    
+        self.update_kwargs(**self.kwargs)
+
     def update_kwargs(self,**change_kwargs):
         self.kwargs.update(change_kwargs)
+        print(self.kwargs)
         self.model = self.model_class(**self.kwargs)
+    
+    @property
+    def name(self):
+        return self.model.__class__.__qualname__
         
 
 class Trainer:
@@ -45,7 +51,7 @@ class Trainer:
 
         for data, target in self.data_loader:
             data, target = data.to(self.device), target.to(self.device)
-            data = data.view(data.shape[0], -1)
+            # data = data.view(data.shape[0], -1)
 
             self.optimizer.zero_grad()
             output = self.model(data)
@@ -66,7 +72,7 @@ class Trainer:
         with torch.no_grad():
             for data, target in self.test_loader:
                 data, target = data.to(self.device), target.to(self.device)
-                data = data.view(data.shape[0], -1)
+                # data = data.view(data.shape[0], -1)
 
                 output = self.model(data)
                 loss = self.criterion(output, target)

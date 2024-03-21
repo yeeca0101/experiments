@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 
+#
 class GELU(nn.GELU):
     def __init__(self, approximate: str = 'none') -> None:
         super().__init__(approximate)
@@ -39,10 +40,10 @@ class TanhExp(nn.Module):
     def forward(self, x):
         return x * torch.tanh(torch.exp(x))
     
-# My method
-class BipolarClippedUnit(nn.Module):
+# My method : SquaredClipUnit
+class SCiU(nn.Module):
     def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8):
-        super(BipolarClippedUnit, self).__init__()
+        super(SCiU, self).__init__()
         self.pos_multiplier = pos_multiplier
         self.neg_multiplier = neg_multiplier
         self.clip_min = clip_min
