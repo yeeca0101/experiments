@@ -13,6 +13,7 @@ from torchvision.models import resnet18,resnet50,resnet152
 
 from util.utils import pair
 from torchvision.models import resnet18,resnet50,resnet152
+from torchvision.models import resnet18,resnet50,resnet152
 
 class BasicMLP(nn.Module):
     '''
@@ -32,6 +33,18 @@ class BasicMLP(nn.Module):
         x = self.layer3(x)
         return x
     
+class ResNet(nn.Module):
+    support_models = {
+        'resnet18': resnet18,
+        'resnet50': resnet50,
+        'resnet152': resnet152
+    }
+    def __init__(self, name: str, pre_trained=False,new_activation=None):
+        super(ResNet, self).__init__()  # Initialize the nn.Module base class
+        self.name = name
+        self.model = ResNet.support_models[name](pretrained=pre_trained)
+        if new_activation is not None:
+            replace_activations(self.model,nn.ReLU,new_activation)
 
 def get_models_addr(return_type='dict'):
     # 전역 네임스페이스에서 nn.Module을 상속받는 클래스 찾기
@@ -54,6 +67,12 @@ def build_model(model_class,activation,**kwargs):
 def replace_activations(model, 
                         prev_activation:List[nn.Module,]|nn.Module=(nn.ReLU, nn.Sigmoid, nn.Tanh, nn.LeakyReLU), 
                         new_activation:nn.Module|None=None):
+    for name, module in model.named_children():
+        if isinstance(module, prev_activation):
+            setattr(model, name, new_activation())
+        else:
+            replace_activations(module, prev_activation, new_activation)
+    
     """
     Recursively replaces all activation functions with the new activation in the model.
 
@@ -67,15 +86,15 @@ def replace_activations(model,
     # if not isinstance(prev_activation,tuple):
     #     prev_activation = (prev_activation)
 
-    for name, child in model.named_children():
-        # If the child is an activation function (e.g., ReLU, Sigmoid, etc.),
-        # replace it with the new activation function.
-        # You might need to add more activation types here.
-        if isinstance(child, prev_activation):
-            setattr(model, name, new_activation)
-        # If the child is not an activation, recurse on it if it has children of its own.
-        elif list(child.children()):
-            replace_activations(child, prev_activation, new_activation)
+    # for name, child in model.named_children():
+    #     # If the child is an activation function (e.g., ReLU, Sigmoid, etc.),
+    #     # replace it with the new activation function.
+    #     # You might need to add more activation types here.
+    #     if isinstance(child, prev_activation):
+    #         setattr(model, name, new_activation)
+    #     # If the child is not an activation, recurse on it if it has children of its own.
+    #     elif list(child.children()):
+    #         replace_activations(child, prev_activation, new_activation)
 
 if __name__ == '__main__':
     kwargs = {
