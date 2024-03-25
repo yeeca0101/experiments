@@ -2,7 +2,6 @@ from typing import List,Any
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
-import matplotlib.pyplot as plt
 import torch
 
 ### vis
@@ -52,7 +51,14 @@ def vis_activations(activations, x, cols,xlim=None,ylim=None):
 ### utils
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters())
-    
+
+def exclude_from_activations(cls):
+    """
+    Decorator to mark classes to be excluded from activation functions.
+    """
+    cls._exclude_from_activations = True  # Set an attribute to mark the class
+    return cls
+
     
 
 ### build

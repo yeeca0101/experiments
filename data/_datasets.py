@@ -25,6 +25,17 @@ class CIFAR10(datasets.CIFAR10):
 
         super().__init__(root, train, transform, target_transform, download)
 
+class CIFAR100(datasets.CIFAR100):
+    def __init__(self, train: bool = True, transform: Callable[..., Any] | None = None, target_transform: Callable[..., Any] | None = None) -> None:
+        curr_dir=  get_current_script_directory()
+        root=os.path.join(curr_dir,'dataset/CIFAR100')
+        download=False
+        if transform is None:
+            import torchvision.transforms as transforms
+            transform = transforms.ToTensor()
+
+        super().__init__(root, train, transform, target_transform, download)
+
 class MNIST(datasets.MNIST):
     def __init__(self, train: bool = True, transform: Callable[..., Any] | None = None, target_transform: Callable[..., Any] | None = None) -> None:
         curr_dir=  get_current_script_directory()

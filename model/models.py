@@ -44,14 +44,20 @@ class ResNet(nn.Module):
                  n_classes=None,
                  pre_trained=False,
                  activation=None,
+                 num_layers=None,
                  **kwargs,
                  ):
         super(ResNet, self).__init__()  # Initialize the nn.Module base class
         self.name = name
-        self.model = ResNet.support_models[name](pretrained=pre_trained)
-        
+        if num_layers:
+            from torchvision.models import ResNet as BaseResNet
+            from torchvision.models.resnet import BasicBlock
+            self.model = BaseResNet(BasicBlock,num_layers)
+        else:           
+            self.model = ResNet.support_models[name](pretrained=pre_trained)
+            self.model.fc = nn.Linear(512,n_classes,bias=False)
+
         self.model.conv1 = nn.Conv2d(in_channel,64,kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.model.fc = nn.Linear(512,n_classes,bias=False)
 
         if activation is not None:
             replace_activations(self.model,nn.ReLU,activation)
