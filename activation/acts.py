@@ -1,6 +1,13 @@
+import sys
+from pathlib import Path
+file = Path(__file__).resolve()
+parent, root = file.parent, file.parents[1]
+sys.path.append(str(root))
+
 import torch
 import torch.nn as nn
 
+from util.utils import exclude_from_activations
 
 #
 class GELU(nn.GELU):
@@ -60,6 +67,7 @@ class UnitT(nn.Module):
             y_clipped =y
         return y_clipped
     
+@exclude_from_activations
 class BLU(nn.Module):
     def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8):
         super(BLU, self).__init__()
@@ -93,9 +101,12 @@ class SCiU(nn.Module):
         return y_clipped
 
 def get_activations(return_type='dict'):
-    # 전역 네임스페이스에서 nn.Module을 상속받는 클래스 찾기
+    # 전역 네임스페이스에서 nn.Module을 상속받는 클래스 찾기, 단 _exclude_from_activations 속성이 없는 클래스만
     module_subclasses = {name: cls for name, cls in globals().items()
-                         if isinstance(cls, type) and issubclass(cls, nn.Module) and cls is not nn.Module}
+                         if isinstance(cls, type) 
+                         and issubclass(cls, nn.Module) 
+                         and cls is not nn.Module
+                         and not getattr(cls, '_exclude_from_activations', False)}  # Check for the exclusion marker
 
     # 인스턴스 생성
     instances = {name: cls() for name, cls in module_subclasses.items()}
