@@ -41,6 +41,41 @@ class TanhExp(nn.Module):
         return x * torch.tanh(torch.exp(x))
     
 # My method : SquaredClipUnit
+class UnitT(nn.Module):
+    def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8,pos_method=lambda x:x,neg_method=lambda x:x):
+        super(UnitT, self).__init__()
+        self.pos_multiplier = pos_multiplier
+        self.neg_multiplier = neg_multiplier
+        self.clip_min = clip_min
+        self.clip_max = clip_max
+        self.pos_m = pos_method
+        self.neg_m = neg_method
+
+    def forward(self, x):
+        y = torch.where(x > 0, self.pos_multiplier * self.pos_m(x),
+                        self.neg_multiplier * self.neg_m(x))
+        if self.clip_min and self.clip_max:
+            y_clipped = torch.clamp(y, self.clip_min, self.clip_max)
+        else:
+            y_clipped =y
+        return y_clipped
+    
+class BLU(nn.Module):
+    def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8):
+        super(BLU, self).__init__()
+        self.pos_multiplier = pos_multiplier
+        self.neg_multiplier = neg_multiplier
+        self.clip_min = clip_min
+        self.clip_max = clip_max
+
+    def forward(self, x):
+        # 조건에 따라 값을 계산
+        y = torch.where(x > 0, self.pos_multiplier * torch.log(x),
+                        self.neg_multiplier * torch.log(torch.abs(x)))
+        # 결과값 클리핑
+        y_clipped = torch.clamp(y, self.clip_min, self.clip_max)
+        return y_clipped
+
 class SCiU(nn.Module):
     def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8):
         super(SCiU, self).__init__()

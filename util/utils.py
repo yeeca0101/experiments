@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import torch
 
+### vis
 def vis_activations(activations, x, cols,xlim=None,ylim=None):
     """
     Visualizes the activations for a set of input data.
@@ -48,8 +49,13 @@ def vis_activations(activations, x, cols,xlim=None,ylim=None):
     plt.show()
 
 
+### utils
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters())
+    
+    
 
-
+### build
 def pair(x):
     if not isinstance(x,(list,tuple)):
         return (x,x)
