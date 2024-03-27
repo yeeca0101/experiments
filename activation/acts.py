@@ -9,10 +9,35 @@ import torch.nn as nn
 
 from util.utils import exclude_from_activations
 
-#
+# final methods
+class sASN(nn.Module):
+    def __init__(self, beta_init=1.0, alpha=0.1):
+        super(sASN, self).__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]))  # Learnable parameter
+        self.alpha = alpha  # Could also be made learnable if desired
+
+    def forward(self, x):
+        return x * torch.sigmoid(self.beta * x) + self.alpha * torch.tanh(x)
+    
 class GELU(nn.GELU):
     def __init__(self, approximate: str = 'none') -> None:
         super().__init__(approximate)
+
+class ASN(nn.Module):
+    def __init__(self, beta_init=1.0, alpha=0.1):
+        super(ASN, self).__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=True)  # Learnable parameter
+        self.alpha = alpha  # Could also be made learnable if desired
+
+    def forward(self, x):
+        sig_part = torch.sigmoid(self.beta * x)
+        sqr_part = torch.pow(x, 2)
+        y = x * sig_part + self.alpha * sqr_part
+        y = torch.clamp(y, -5, 5)
+        # x = x * torch.sigmoid(self.beta * x) + self.alpha * torch.pow(x, 2)
+        # print(x)
+        return y
+
 
 
 # https://arxiv.org/pdf/2301.05993.pdf
@@ -48,6 +73,7 @@ class TanhExp(nn.Module):
         return x * torch.tanh(torch.exp(x))
     
 # My method : SquaredClipUnit
+@exclude_from_activations
 class UnitT(nn.Module):
     def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8,pos_method=lambda x:x,neg_method=lambda x:x):
         super(UnitT, self).__init__()
