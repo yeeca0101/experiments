@@ -18,11 +18,8 @@ class sASN(nn.Module):
 
     def forward(self, x):
         return x * torch.sigmoid(self.beta * x) + self.alpha * torch.tanh(x)
-    
-class GELU(nn.GELU):
-    def __init__(self, approximate: str = 'none') -> None:
-        super().__init__(approximate)
 
+# will remove
 class ASN(nn.Module):
     def __init__(self, beta_init=1.0, alpha=0.1):
         super(ASN, self).__init__()
@@ -38,9 +35,73 @@ class ASN(nn.Module):
         # print(x)
         return y
 
+# To be compared
+class GELU(nn.GELU):
+    def __init__(self, approximate: str = 'none') -> None:
+        super().__init__(approximate)
+
+class ELU(nn.ELU):
+    '''
+        x                   x>0       
+        alpha*(exp(x)-1)    x<=0
+    '''
+    def __init__(self, alpha: float = 1, inplace: bool = False) -> None:
+        super().__init__(alpha, inplace)
+
+class SiLU(nn.SiLU):
+    '''
+        x*sigmoid(x) as same as Swish-1
+        for reinforcement learning
+    '''
+    def __init__(self, inplace: bool = False):
+        super().__init__(inplace)
+
+class Swish(nn.Module):
+    '''
+        x*sigmoid(b*x)  ,b = trainable parameter
+    '''
+    def __init__(self, beta_init=1.0):
+        super().__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=True)
+
+    def forward(self,x):
+        return x*torch.sigmoid(self.beta*x)
+
+class Mish(nn.Mish):
+    '''
+        x*Tanh(Softplus(x)) , Softplus = x*tanh(ln(1+exp(x))
+    '''
+    def __init__(self, inplace: bool = False):
+        super().__init__(inplace)
+
+# test
+class sSigmoid(nn.Module):
+    def __init__(self, beta_init=1.0, alpha=0.1):
+        super(sSigmoid, self).__init__()
+        self.beta = beta_init
+    def forward(self, x):
+        return x * torch.sigmoid(self.beta * torch.tanh(x)-0.5) 
+
+@exclude_from_activations
+class BDU(nn.Module):
+    def __init__(self, beta_init=1.0, alpha=0.1):
+        super(BDU, self).__init__()
+        self.beta = beta_init
+        self.div_2pi = 1/torch.sqrt(torch.as_tensor([2*torch.pi]))
+    def forward(self, x):
+        return self.div_2pi * torch.exp(-1*torch.square(x)*0.5)
+@exclude_from_activations
+class GELUa(nn.Module):
+    '''approximate GELU by https://arxiv.org/pdf/1606.08415.pdf'''
+    def __init__(self,):
+        super(GELUa, self).__init__()
+        self.a = 1.702
+    def forward(self, x):
+        return x*torch.sigmoid(self.a*x)
 
 
 # https://arxiv.org/pdf/2301.05993.pdf
+@exclude_from_activations
 class SoftModulusQ(nn.Module):
     def __init__(self):
         super(SoftModulusQ, self).__init__()
@@ -49,6 +110,7 @@ class SoftModulusQ(nn.Module):
         return torch.where(torch.abs(x) <= 1, x**2 * (2 - torch.abs(x)), torch.abs(x))
 
 # https://arxiv.org/pdf/2301.05993.pdf Vallés-Pérez et al. (2023)
+@exclude_from_activations
 class Modulus(nn.Module):
     def __init__(self):
         super(Modulus, self).__init__()
@@ -56,7 +118,7 @@ class Modulus(nn.Module):
     def forward(self, x):
         return torch.abs(x)
 
-#
+@exclude_from_activations
 class BipolarSigmoid(nn.Module):
     def __init__(self):
         super(BipolarSigmoid, self).__init__()
@@ -64,7 +126,7 @@ class BipolarSigmoid(nn.Module):
     def forward(self, x):
         return 2 * (1 / (1 + torch.exp(-x))) - 1
     
-#
+@exclude_from_activations
 class TanhExp(nn.Module):
     def __init__(self):
         super(TanhExp, self).__init__()
@@ -110,6 +172,7 @@ class BLU(nn.Module):
         y_clipped = torch.clamp(y, self.clip_min, self.clip_max)
         return y_clipped
 
+@exclude_from_activations
 class SCiU(nn.Module):
     def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8):
         super(SCiU, self).__init__()
