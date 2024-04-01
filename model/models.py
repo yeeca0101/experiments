@@ -10,7 +10,7 @@ sys.path.append(str(root))
 
 import torch.nn as nn
 from torchvision.models import resnet18,resnet50,resnet152, swin_b,swin_s,swin_t
-from g_mlp_pytorch import gMLPVision
+from g_mlp_pytorch import gMLPVision,gMLP
 
 from util.utils import pair
 
@@ -18,17 +18,20 @@ class BasicMLP(nn.Module):
     '''
     max acc 97.71 | 97.62 in MNIST
     '''
-    def __init__(self, input_size, hidden_size, num_classes, activation=None,**kwargs):
+    def __init__(self, input_size, hidden_size, num_classes, activation=None,use_bn=False,**kwargs):
         super(BasicMLP, self).__init__()
         self.layer1 = nn.Linear(input_size, hidden_size)
+        self.bn1 = nn.BatchNorm1d(hidden_size)
         self.layer2 = nn.Linear(hidden_size, hidden_size)
+        self.bn2 = nn.BatchNorm1d(hidden_size)
         self.layer3 = nn.Linear(hidden_size, num_classes)
         self.activation = activation
- 
+        self.use_bn = use_bn
+
     def forward(self, x):
         x = x.view(x.shape[0], -1)
-        x = self.activation(self.layer1(x))
-        x = self.activation(self.layer2(x))
+        x = self.activation(self.bn1(self.layer1(x)) if self.use_bn else self.layer1(x))
+        x = self.activation(self.bn2(self.layer2(x)) if self.use_bn else self.layer2(x))
         x = self.layer3(x)
         return x
     
@@ -85,6 +88,8 @@ class gMlpVision(nn.Module):
     def forward(self,x):
         return self.model(x)
     
+
+
 class SwinTransformer(nn.Module):
     support_models={
         'swin_b':swin_b,

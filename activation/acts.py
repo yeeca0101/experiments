@@ -6,14 +6,16 @@ sys.path.append(str(root))
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from util.utils import exclude_from_activations
 
 # final methods
 class sASN(nn.Module):
-    def __init__(self, beta_init=1.0, alpha=0.1):
+    '''scaled Swish using tanh'''
+    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
         super(sASN, self).__init__()
-        self.beta = nn.Parameter(torch.tensor([beta_init]))  # Learnable parameter
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
         self.alpha = alpha  # Could also be made learnable if desired
 
     def forward(self, x):
@@ -74,13 +76,86 @@ class Mish(nn.Mish):
     def __init__(self, inplace: bool = False):
         super().__init__(inplace)
 
+class Softplus(nn.Softplus):
+    def __init__(self, beta: int = 1, threshold: int = 20) -> None:
+        super().__init__(beta, threshold)
+
+# https://arxiv.org/pdf/2301.05993.pdf
+# @exclude_from_activations
+class SoftModulusQ(nn.Module):
+    def __init__(self):
+        super(SoftModulusQ, self).__init__()
+    
+    def forward(self, x):
+        return torch.where(torch.abs(x) <= 1, x**2 * (2 - torch.abs(x)), torch.abs(x))
+
+# cvpr 2023
+@exclude_from_activations
+class IIEU(nn.Module):
+    def __init__(self, in_features=1
+                 ):
+        super(IIEU, self).__init__()
+        # Term-B의 Sigmoid 함수에 대한 파라미터
+        self.beta = nn.Parameter(torch.zeros(1, in_features, 1, 1))
+        self.gamma = nn.Parameter(torch.ones(1, in_features, 1, 1))
+        
+        # 조절 가능한 임계값 η
+        self.eta = nn.Parameter(torch.tensor(0.05))
+    
+    def forward(self, x):
+        # 특징-필터 유사도 계산 (Term-S)
+        magnitude = torch.sqrt(torch.sum(x ** 2, dim=1, keepdim=True))
+        term_s = x / magnitude
+        
+        # Term-B 계산
+        avgpool = F.adaptive_avg_pool1d(x, x.size()[-1])
+        term_b = torch.sigmoid(self.beta * avgpool + self.gamma)
+        
+        # Approximated Similarity와 Adjuster 적용
+        approx_similarity = (term_s + term_b) / 2  # 단순화된 예
+        adjusted_similarity = torch.where(approx_similarity > self.eta, 
+                                           approx_similarity, 
+                                           self.eta * torch.exp(approx_similarity - self.eta))
+        
+        # 최종 활성화 함수 적용
+        activated = adjusted_similarity * x
+        return activated
+    
+
 # test
 class sSigmoid(nn.Module):
-    def __init__(self, beta_init=1.0, alpha=0.1):
+    def __init__(self, beta_init=1.0):
         super(sSigmoid, self).__init__()
         self.beta = beta_init
     def forward(self, x):
-        return x * torch.sigmoid(self.beta * torch.tanh(x)-0.5) 
+        return x * torch.sigmoid(self.beta * torch.tanh(x)) 
+
+class SwishTb(nn.Module):
+    def __init__(self, beta_init=1.0):
+        super(SwishTb, self).__init__()
+        self.beta = beta_init
+    def forward(self, x):
+        return x * torch.sigmoid(torch.tanh(self.beta*x)) 
+
+class Twish(nn.Module):
+    '''scaled Swish using tanh'''
+    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
+        super(Twish, self).__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
+        self.alpha = alpha  # Could also be made learnable if desired
+
+    def forward(self, x):
+        return torch.tanh(x)*torch.sigmoid(self.beta * x)
+    
+class SliuT(nn.Module):
+    '''scaled Swish using tanh'''
+    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
+        super(SliuT, self).__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
+        self.alpha = alpha  # Could also be made learnable if desired
+
+    def forward(self, x):
+        return x*torch.sigmoid(x)+self.alpha*torch.tanh(self.beta*x)
 
 @exclude_from_activations
 class BDU(nn.Module):
@@ -100,17 +175,10 @@ class GELUa(nn.Module):
         return x*torch.sigmoid(self.a*x)
 
 
-# https://arxiv.org/pdf/2301.05993.pdf
-@exclude_from_activations
-class SoftModulusQ(nn.Module):
-    def __init__(self):
-        super(SoftModulusQ, self).__init__()
-    
-    def forward(self, x):
-        return torch.where(torch.abs(x) <= 1, x**2 * (2 - torch.abs(x)), torch.abs(x))
+
 
 # https://arxiv.org/pdf/2301.05993.pdf Vallés-Pérez et al. (2023)
-@exclude_from_activations
+# @exclude_from_activations
 class Modulus(nn.Module):
     def __init__(self):
         super(Modulus, self).__init__()
