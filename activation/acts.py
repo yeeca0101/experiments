@@ -11,18 +11,17 @@ import torch.nn.functional as F
 from util.utils import exclude_from_activations
 
 # final methods
-class sASN(nn.Module):
-    '''scaled Swish using tanh'''
+class SwishT(nn.Module):
     def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
-        super(sASN, self).__init__()
+        super(SwishT, self).__init__()
         self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
         self.alpha = alpha  # Could also be made learnable if desired
 
     def forward(self, x):
         return x * torch.sigmoid(self.beta * x) + self.alpha * torch.tanh(x)
 
-# will remove
 class ASN(nn.Module):
+    'Adaptive Squared Non-Linearity'
     def __init__(self, beta_init=1.0, alpha=0.1):
         super(ASN, self).__init__()
         self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=True)  # Learnable parameter
@@ -41,7 +40,7 @@ class ASN(nn.Module):
 class GELU(nn.GELU):
     def __init__(self, approximate: str = 'none') -> None:
         super().__init__(approximate)
-
+@exclude_from_activations
 class ELU(nn.ELU):
     '''
         x                   x>0       
@@ -76,12 +75,13 @@ class Mish(nn.Mish):
     def __init__(self, inplace: bool = False):
         super().__init__(inplace)
 
+@exclude_from_activations
 class Softplus(nn.Softplus):
     def __init__(self, beta: int = 1, threshold: int = 20) -> None:
         super().__init__(beta, threshold)
 
 # https://arxiv.org/pdf/2301.05993.pdf
-# @exclude_from_activations
+@exclude_from_activations
 class SoftModulusQ(nn.Module):
     def __init__(self):
         super(SoftModulusQ, self).__init__()
@@ -123,6 +123,7 @@ class IIEU(nn.Module):
     
 
 # test
+@exclude_from_activations
 class sSigmoid(nn.Module):
     def __init__(self, beta_init=1.0):
         super(sSigmoid, self).__init__()
@@ -130,6 +131,7 @@ class sSigmoid(nn.Module):
     def forward(self, x):
         return x * torch.sigmoid(self.beta * torch.tanh(x)) 
 
+@exclude_from_activations
 class SwishTb(nn.Module):
     def __init__(self, beta_init=1.0):
         super(SwishTb, self).__init__()
@@ -178,7 +180,7 @@ class GELUa(nn.Module):
 
 
 # https://arxiv.org/pdf/2301.05993.pdf Vallés-Pérez et al. (2023)
-# @exclude_from_activations
+@exclude_from_activations
 class Modulus(nn.Module):
     def __init__(self):
         super(Modulus, self).__init__()
