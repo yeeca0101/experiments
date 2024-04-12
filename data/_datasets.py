@@ -7,6 +7,7 @@
 import os
 from typing import Callable, Any,List
 import numpy as np
+import torch
 from torchvision import datasets
 from torch.utils.data import Dataset
 from PIL import Image
@@ -198,7 +199,26 @@ class COCOSegDataset(COCOBase):
 def get_current_script_directory():
     # /root/data
     return os.path.dirname(os.path.realpath(__file__))
+class NoisyDataset(Dataset):
+    def __init__(self, dataset, noise_level=0, max_noise_level=1):
+        self.dataset = dataset
+        self.noise_level = noise_level
+        self.max_noise_level = max_noise_level
 
+    def __getitem__(self, index):
+        image, label = self.dataset[index]
+        # Scale the noise level from 0 (no noise) to max_noise_level (max noise)
+        current_std_dev = (self.noise_level / self.max_noise_level) * 0.2
+        noise = torch.randn_like(image) * current_std_dev
+        noisy_image = image + noise
+        return noisy_image, label
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def set_noise_level(self, noise_level):
+        self.noise_level = noise_level
+        
 # test
 if __name__ == '__main__':
 

@@ -200,6 +200,34 @@ def visualize_3d_activations_landscape(acts, resolution=100,input_type='linspace
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters())
 
+def count_act_parameters(model):
+    return {n:p.item() for n,p in model.act.named_parameters()}
+        
+
+def print_act_p(model):
+        print(count_act_parameters(model))
+
+def model_info(model):
+    # total params, act's param
+    print(model.__class__.__name__)
+    print(f'total params : {count_parameters(model)}')    
+    print(f'{model.act.__class__.__name__} param : {count_act_parameters(model)}')    
+
+
+def print_results(model,ckpt_path):
+    state_dict = torch.load(ckpt_path)
+    try:
+        model.load_state_dict(state_dict['net'])
+    except:
+        model.load_state_dict(state_dict)
+    model_info(model)
+    try:
+        print('best acc:',state_dict['acc'])
+        print('best ep :',state_dict['epoch'])
+    except:
+        print('not exist info.')
+
+
 def exclude_from_activations(cls):
     """
     Decorator to mark classes to be excluded from activation functions.

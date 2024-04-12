@@ -15,9 +15,6 @@ from g_mlp_pytorch import gMLPVision,gMLP
 from util.utils import pair
 
 class BasicMLP(nn.Module):
-    '''
-    max acc 97.71 | 97.62 in MNIST
-    '''
     def __init__(self, input_size, hidden_size, num_classes, activation=None,use_bn=False,**kwargs):
         super(BasicMLP, self).__init__()
         self.layer1 = nn.Linear(input_size, hidden_size)
