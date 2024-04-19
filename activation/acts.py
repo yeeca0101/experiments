@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from activation.GLUs import *
 from util.utils import exclude_from_activations
 
 # final methods
@@ -281,10 +282,13 @@ if __name__ == '__main__':
     # x = torch.linspace(-3,3,50)
     # x = torch.randn((100,))
     # plt.scatter(x.numpy(),act(x).numpy())
-    auto_instances_dict = get_activations('dict')
+    auto_instances_dict = get_GLUs('list')
+    # auto_instances_dict = get_activations('dict')
     print(auto_instances_dict)
-    print(type(auto_instances_dict['Modulus']))
-    act = auto_instances_dict['Modulus']
+    act = auto_instances_dict[0]
+    print(type(act))
     x = torch.linspace(-3,3,50)
+    print(x.chunk(2,-1)[0].shape)
     x = torch.randn((100,))
-    print(act(x).numpy())
+    with torch.no_grad():
+        print(act(x).shape)
