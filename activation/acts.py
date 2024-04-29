@@ -8,20 +8,97 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from activation.GLUs import *
+# from activation.GLUs_v2 import *
 from util.utils import exclude_from_activations
 
+
+class NamedModule(nn.Module):
+    def __init__(self, ) -> None:
+        super().__init__()
+    @property
+    def __name__(self):
+        return self.__class__.__name__
+    
+
+
 # final methods
-class SwishT(nn.Module):
+class SwishT(NamedModule):
     def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
-        super(SwishT, self).__init__()
+        super().__init__()
         self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
         self.alpha = alpha  # Could also be made learnable if desired
 
     def forward(self, x):
         return x * torch.sigmoid(self.beta * x) + self.alpha * torch.tanh(x)
 
-class ASN(nn.Module):
+# for comparsion
+# [ACON_C, Pserf, ErfAct, SMU, GELU, SiLU, Mish, Swish]
+class ACON_C(nn.Module):
+    def __init__(self, p1=1.0, p2=0.0, beta=1.0):
+        super(ACON_C, self).__init__()
+        self.p1 = nn.Parameter(torch.tensor(p1))
+        self.p2 = nn.Parameter(torch.tensor(p2))
+        self.beta = nn.Parameter(torch.tensor(beta))
+
+    def forward(self, x):
+        return x * torch.sigmoid(self.beta * (self.p1 - self.p2) * x) + self.p2 * x
+
+class GELU(nn.GELU):
+    def __init__(self, approximate: str = 'none') -> None:
+        super().__init__(approximate)
+    @property
+    def __name__(self):
+        return self.__class__.__name__
+    
+class SiLU(nn.SiLU):
+    '''
+        x*sigmoid(x) as same as Swish-1
+        for reinforcement learning
+    '''
+    def __init__(self, inplace: bool = False):
+        super().__init__(inplace)
+
+    @property
+    def __name__(self):
+        return self.__class__.__name__
+
+class Mish(nn.Mish):
+    '''
+        x*Tanh(Softplus(x)) , Softplus = x*tanh(ln(1+exp(x))
+    '''
+    def __init__(self, inplace: bool = False):
+        super().__init__(inplace)
+
+    @property
+    def __name__(self):
+        return self.__class__.__name__
+    
+class Swish(NamedModule):
+    '''
+        x*sigmoid(b*x)  ,b = trainable parameter
+    '''
+    def __init__(self, beta_init=1.0):
+        super().__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=True)
+
+    def forward(self,x):
+        return x*torch.sigmoid(self.beta*x)
+    
+
+# for appendix
+@exclude_from_activations
+class SiLUT(SwishT):
+    def __init__(self,):
+        super().__init__(beta_init=1.0, alpha=0.1,requires_grad=False)
+
+    @property
+    def __name__(self):
+        return self.__class__.__name__
+    
+
+
+@exclude_from_activations
+class ASN(NamedModule):
     'Adaptive Squared Non-Linearity'
     def __init__(self, beta_init=1.0, alpha=0.1):
         super(ASN, self).__init__()
@@ -37,10 +114,6 @@ class ASN(nn.Module):
         # print(x)
         return y
 
-# To be compared
-class GELU(nn.GELU):
-    def __init__(self, approximate: str = 'none') -> None:
-        super().__init__(approximate)
 @exclude_from_activations
 class ELU(nn.ELU):
     '''
@@ -50,31 +123,6 @@ class ELU(nn.ELU):
     def __init__(self, alpha: float = 1, inplace: bool = False) -> None:
         super().__init__(alpha, inplace)
 
-class SiLU(nn.SiLU):
-    '''
-        x*sigmoid(x) as same as Swish-1
-        for reinforcement learning
-    '''
-    def __init__(self, inplace: bool = False):
-        super().__init__(inplace)
-
-class Swish(nn.Module):
-    '''
-        x*sigmoid(b*x)  ,b = trainable parameter
-    '''
-    def __init__(self, beta_init=1.0):
-        super().__init__()
-        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=True)
-
-    def forward(self,x):
-        return x*torch.sigmoid(self.beta*x)
-
-class Mish(nn.Mish):
-    '''
-        x*Tanh(Softplus(x)) , Softplus = x*tanh(ln(1+exp(x))
-    '''
-    def __init__(self, inplace: bool = False):
-        super().__init__(inplace)
 
 @exclude_from_activations
 class Softplus(nn.Softplus):
@@ -83,7 +131,7 @@ class Softplus(nn.Softplus):
 
 # https://arxiv.org/pdf/2301.05993.pdf
 @exclude_from_activations
-class SoftModulusQ(nn.Module):
+class SoftModulusQ(NamedModule):
     def __init__(self):
         super(SoftModulusQ, self).__init__()
     
@@ -92,7 +140,7 @@ class SoftModulusQ(nn.Module):
 
 # cvpr 2023
 @exclude_from_activations
-class IIEU(nn.Module):
+class IIEU(NamedModule):
     def __init__(self, in_features=1
                  ):
         super(IIEU, self).__init__()
@@ -121,68 +169,22 @@ class IIEU(nn.Module):
         # 최종 활성화 함수 적용
         activated = adjusted_similarity * x
         return activated
-    
 
-# test
-@exclude_from_activations
-class sSigmoid(nn.Module):
-    def __init__(self, beta_init=1.0):
-        super(sSigmoid, self).__init__()
-        self.beta = beta_init
-    def forward(self, x):
-        return x * torch.sigmoid(self.beta * torch.tanh(x)) 
+
 
 @exclude_from_activations
-class SwishTb(nn.Module):
-    def __init__(self, beta_init=1.0):
-        super(SwishTb, self).__init__()
-        self.beta = beta_init
-    def forward(self, x):
-        return x * torch.sigmoid(torch.tanh(self.beta*x)) 
-
-class Twish(nn.Module):
-    '''scaled Swish using tanh'''
-    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
-        super(Twish, self).__init__()
-        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
-        self.alpha = alpha  # Could also be made learnable if desired
-
-    def forward(self, x):
-        return torch.tanh(x)*torch.sigmoid(self.beta * x)
-    
-class SliuT(nn.Module):
-    '''scaled Swish using tanh'''
-    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
-        super(SliuT, self).__init__()
-        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
-        self.alpha = alpha  # Could also be made learnable if desired
-
-    def forward(self, x):
-        return x*torch.sigmoid(x)+self.alpha*torch.tanh(self.beta*x)
-
-@exclude_from_activations
-class BDU(nn.Module):
+class BDU(NamedModule):
     def __init__(self, beta_init=1.0, alpha=0.1):
         super(BDU, self).__init__()
         self.beta = beta_init
         self.div_2pi = 1/torch.sqrt(torch.as_tensor([2*torch.pi]))
     def forward(self, x):
         return self.div_2pi * torch.exp(-1*torch.square(x)*0.5)
-@exclude_from_activations
-class GELUa(nn.Module):
-    '''approximate GELU by https://arxiv.org/pdf/1606.08415.pdf'''
-    def __init__(self,):
-        super(GELUa, self).__init__()
-        self.a = 1.702
-    def forward(self, x):
-        return x*torch.sigmoid(self.a*x)
-
-
-
+    
 
 # https://arxiv.org/pdf/2301.05993.pdf Vallés-Pérez et al. (2023)
 @exclude_from_activations
-class Modulus(nn.Module):
+class Modulus(NamedModule):
     def __init__(self):
         super(Modulus, self).__init__()
     
@@ -190,7 +192,7 @@ class Modulus(nn.Module):
         return torch.abs(x)
 
 @exclude_from_activations
-class BipolarSigmoid(nn.Module):
+class BipolarSigmoid(NamedModule):
     def __init__(self):
         super(BipolarSigmoid, self).__init__()
     
@@ -198,74 +200,20 @@ class BipolarSigmoid(nn.Module):
         return 2 * (1 / (1 + torch.exp(-x))) - 1
     
 @exclude_from_activations
-class TanhExp(nn.Module):
+class TanhExp(NamedModule):
     def __init__(self):
         super(TanhExp, self).__init__()
     
     def forward(self, x):
         return x * torch.tanh(torch.exp(x))
     
-# My method : SquaredClipUnit
-@exclude_from_activations
-class UnitT(nn.Module):
-    def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8,pos_method=lambda x:x,neg_method=lambda x:x):
-        super(UnitT, self).__init__()
-        self.pos_multiplier = pos_multiplier
-        self.neg_multiplier = neg_multiplier
-        self.clip_min = clip_min
-        self.clip_max = clip_max
-        self.pos_m = pos_method
-        self.neg_m = neg_method
-
-    def forward(self, x):
-        y = torch.where(x > 0, self.pos_multiplier * self.pos_m(x),
-                        self.neg_multiplier * self.neg_m(x))
-        if self.clip_min and self.clip_max:
-            y_clipped = torch.clamp(y, self.clip_min, self.clip_max)
-        else:
-            y_clipped =y
-        return y_clipped
-    
-@exclude_from_activations
-class BLU(nn.Module):
-    def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8):
-        super(BLU, self).__init__()
-        self.pos_multiplier = pos_multiplier
-        self.neg_multiplier = neg_multiplier
-        self.clip_min = clip_min
-        self.clip_max = clip_max
-
-    def forward(self, x):
-        # 조건에 따라 값을 계산
-        y = torch.where(x > 0, self.pos_multiplier * torch.log(x),
-                        self.neg_multiplier * torch.log(torch.abs(x)))
-        # 결과값 클리핑
-        y_clipped = torch.clamp(y, self.clip_min, self.clip_max)
-        return y_clipped
-
-@exclude_from_activations
-class SCiU(nn.Module):
-    def __init__(self, pos_multiplier=2, neg_multiplier=-2, clip_min=-8, clip_max=8):
-        super(SCiU, self).__init__()
-        self.pos_multiplier = pos_multiplier
-        self.neg_multiplier = neg_multiplier
-        self.clip_min = clip_min
-        self.clip_max = clip_max
-
-    def forward(self, x):
-        # 조건에 따라 값을 계산
-        y = torch.where(x > 0, self.pos_multiplier * torch.square(x),
-                        self.neg_multiplier * torch.square(x))
-        # 결과값 클리핑
-        y_clipped = torch.clamp(y, self.clip_min, self.clip_max)
-        return y_clipped
 
 def get_activations(return_type='dict'):
-    # 전역 네임스페이스에서 nn.Module을 상속받는 클래스 찾기, 단 _exclude_from_activations 속성이 없는 클래스만
+    # 전역 네임스페이스에서 NamedModule을 상속받는 클래스 찾기, 단 _exclude_from_activations 속성이 없는 클래스만
     module_subclasses = {name: cls for name, cls in globals().items()
                          if isinstance(cls, type) 
-                         and issubclass(cls, nn.Module) 
-                         and cls is not nn.Module
+                         and (issubclass(cls, nn.Module) or issubclass(cls, NamedModule))
+                         and cls is not NamedModule
                          and not getattr(cls, '_exclude_from_activations', False)}  # Check for the exclusion marker
 
     # 인스턴스 생성
