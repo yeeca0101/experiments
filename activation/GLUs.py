@@ -12,7 +12,7 @@ from util.utils import exclude_from_activations
 
 
 class SwiTGLU(nn.Module):
-    def __init__(self,beta_init=1.0,alpha=0.1,requires_grad=True,in_planes=None,planes=None) -> None:
+    def __init__(self,beta_init=1.0,alpha=0.1,requires_grad=True,in_planes=None,planes=None,depth_wise=True) -> None:
         super().__init__()
         # if beta = 1, requires_grad=False, swish-1=silu
         self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  

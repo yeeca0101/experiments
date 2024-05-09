@@ -7,6 +7,7 @@ sys.path.append(str(root))
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Function
 
 # from activation.GLUs_v2 import *
 from util.utils import exclude_from_activations
@@ -22,6 +23,7 @@ class NamedModule(nn.Module):
 
 
 # final methods
+@exclude_from_activations
 class SwishT(NamedModule):
     def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
         super().__init__()
@@ -31,25 +33,89 @@ class SwishT(NamedModule):
     def forward(self, x):
         return x * torch.sigmoid(self.beta * x) + self.alpha * torch.tanh(x)
 
-# for comparsion
-# [ACON_C, Pserf, ErfAct, SMU, GELU, SiLU, Mish, Swish]
-class ACON_C(nn.Module):
-    def __init__(self, p1=1.0, p2=0.0, beta=1.0):
-        super(ACON_C, self).__init__()
-        self.p1 = nn.Parameter(torch.tensor(p1))
-        self.p2 = nn.Parameter(torch.tensor(p2))
-        self.beta = nn.Parameter(torch.tensor(beta))
+# variants of SwishT
+
+class SwishT_A(NamedModule):
+    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
+        super().__init__()
+        # self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  
+        # base not used beta : swish-1 + tanh
+        self.alpha = alpha  
+
+    def backward_(self,x):
+        fx = self.forward(x)
+        return torch.sigmoid(x)*(x+self.alpha+1-fx)
 
     def forward(self, x):
-        return x * torch.sigmoid(self.beta * (self.p1 - self.p2) * x) + self.p2 * x
+        # simplify by x*torch.sigmoid(x)+self.alpha*torch.tanh(x/2)
+        return torch.sigmoid(x)*(x+2*self.alpha)-self.alpha
 
+class SwishT_B(NamedModule):
+    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
+        super().__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  
+        self.alpha = alpha  
+
+    def backward_(self,x):
+        fx = self.forward(x)
+        return torch.sigmoid(self.beta*x)*(self.beta*(x+self.alpha-fx)+1)
+
+    def forward(self, x):
+        return torch.sigmoid(self.beta*x)*(x+2*self.alpha)-self.alpha
+
+class SwishT_C(NamedModule):
+    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
+        super().__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  
+        self.alpha = alpha  
+
+    def backward_(self,x):
+        fx = self.forward(x)
+        return torch.sigmoid(self.beta*x)*(self.beta*x+self.alpha+1-self.beta*fx)
+
+    def forward(self, x):
+        return torch.sigmoid(self.beta*x)*(x+2*self.alpha/self.beta)-self.alpha/self.beta
+    
+
+# for comparsion
+# [ACON_C, Pserf, ErfAct, SMU, GELU, SiLU, Mish, Swish]
+class SMU(NamedModule):
+    '''
+    Implementation of SMU activation.
+    Shape:
+        - Input: (N, *) where * means, any number of additional
+          dimensions
+        - Output: (N, *), same shape as the input
+    Parameters:
+        - alpha: hyper parameter
+    References:
+        - See related paper:
+        https://arxiv.org/abs/2111.04682
+    '''
+    def __init__(self, alpha = 0.25, mu = 1.0):
+        '''
+        Initialization.
+        INPUT:
+            - alpha: hyper parameter
+            aplha is initialized with zero value by default
+        '''
+        super().__init__()
+        self.alpha = alpha
+        # initialize mu
+        self.mu = nn.Parameter(torch.tensor([mu]),requires_grad=True)
+       
+    def forward(self, x):
+        return ((1+self.alpha)*x + (1-self.alpha)*x*torch.erf(self.mu*(1-self.alpha)*x))/2
+
+@exclude_from_activations
 class GELU(nn.GELU):
     def __init__(self, approximate: str = 'none') -> None:
         super().__init__(approximate)
     @property
     def __name__(self):
         return self.__class__.__name__
-    
+
+@exclude_from_activations    
 class SiLU(nn.SiLU):
     '''
         x*sigmoid(x) as same as Swish-1
@@ -62,6 +128,7 @@ class SiLU(nn.SiLU):
     def __name__(self):
         return self.__class__.__name__
 
+@exclude_from_activations
 class Mish(nn.Mish):
     '''
         x*Tanh(Softplus(x)) , Softplus = x*tanh(ln(1+exp(x))
@@ -73,6 +140,7 @@ class Mish(nn.Mish):
     def __name__(self):
         return self.__class__.__name__
     
+@exclude_from_activations    
 class Swish(NamedModule):
     '''
         x*sigmoid(b*x)  ,b = trainable parameter
@@ -85,6 +153,101 @@ class Swish(NamedModule):
         return x*torch.sigmoid(self.beta*x)
     
 
+# Definition of the ErfAct activation function
+@exclude_from_activations
+class ErfActFunction(Function):
+    @staticmethod
+    def forward(ctx, x, alpha, beta):
+        ctx.save_for_backward(x, alpha, beta)
+        return x * torch.erf(alpha * torch.exp(beta * x))
+ 
+    @staticmethod
+    def backward(ctx, grad_output):
+        x, alpha, beta = ctx.saved_tensors
+        grad_input = grad_alpha = grad_beta = None
+       
+        if ctx.needs_input_grad[0]:
+            grad_input = grad_output * (torch.erf(alpha * torch.exp(beta * x)) +
+                                        2 * alpha * beta * x * torch.exp(beta * x - (alpha * torch.exp(beta * x)) ** 2) /
+                                        torch.sqrt(torch.tensor(torch.pi)))
+       
+        if ctx.needs_input_grad[1]:
+            grad_alpha = grad_output * x * torch.exp(beta * x) * \
+                         (-2 * (alpha * torch.exp(beta * x)) ** 2) / \
+                         torch.sqrt(torch.tensor(torch.pi))
+ 
+        if ctx.needs_input_grad[2]:
+            grad_beta = grad_output * x ** 2 * alpha * torch.exp(beta * x) * \
+                        (-2 * (alpha * torch.exp(beta * x)) ** 2) / \
+                        torch.sqrt(torch.tensor(torch.pi))
+ 
+        return grad_input, grad_alpha, grad_beta
+
+class ErfAct(NamedModule):
+    def __init__(self, alpha=0.75, beta=0.75):
+        super(ErfAct, self).__init__()
+        self.alpha = torch.nn.Parameter(torch.tensor([alpha], dtype=torch.float32))
+        self.beta = torch.nn.Parameter(torch.tensor([beta], dtype=torch.float32))
+ 
+    def forward(self, x):
+        # return ErfActFunction.apply(x, self.alpha, self.beta)
+        return x * torch.erf(self.alpha * torch.exp(self.beta * x))
+    
+   
+# Definition of the Pserf activation function
+@exclude_from_activations
+class PserfFunction(Function):
+    @staticmethod
+    def forward(ctx, input, gamma, delta):
+        ctx.save_for_backward(input, gamma, delta)
+        return input * torch.erf(gamma * torch.log1p(torch.exp(delta * input)))
+ 
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, gamma, delta = ctx.saved_tensors
+        grad_input = grad_gamma = grad_delta = None
+       
+        if ctx.needs_input_grad[0]:
+            grad_input = grad_output * (torch.erf(gamma * torch.log1p(torch.exp(delta * input))) +
+                                        2 * gamma * delta * input / torch.sqrt(torch.tensor(torch.pi)) /
+                                        (1 + torch.exp(-delta * input)) *
+                                        torch.exp(-((gamma * torch.log1p(torch.exp(delta * input))) ** 2)))
+       
+        if ctx.needs_input_grad[1]:
+            grad_gamma = grad_output * input * torch.log1p(torch.exp(delta * input)) * \
+                         2 / torch.sqrt(torch.tensor(torch.pi)) * \
+                         torch.exp(-((gamma * torch.log1p(torch.exp(delta * input))) ** 2))
+ 
+        if ctx.needs_input_grad[2]:
+            grad_delta = grad_output * input ** 2 * gamma / \
+                         (1 + torch.exp(-delta * input)) * \
+                         2 / torch.sqrt(torch.tensor(torch.pi)) * \
+                         torch.exp(-((gamma * torch.log1p(torch.exp(delta * input))) ** 2))
+ 
+        return grad_input, grad_gamma, grad_delta
+
+class Pserf(NamedModule):
+    def __init__(self, gamma=1.25, delta=0.85):
+        super(Pserf, self).__init__()
+        self.gamma = nn.Parameter(torch.tensor(gamma))
+        self.delta = nn.Parameter(torch.tensor(delta))
+
+    def forward(self, x):
+        # return PserfFunction.apply(input, self.gamma, self.delta)
+        return x * torch.erf(self.gamma * torch.log1p(torch.exp(self.delta * x)))
+    
+@exclude_from_activations
+class ACON_C(NamedModule):
+    def __init__(self, p1=1.0, p2=0.0, beta=1.0):
+        super(ACON_C, self).__init__()
+        self.p1 = nn.Parameter(torch.tensor([p1]))
+        self.p2 = nn.Parameter(torch.tensor([p2]))
+        self.beta = nn.Parameter(torch.tensor([beta]))
+
+    def forward(self, x):
+        return x * torch.sigmoid(self.beta * (self.p1 - self.p2) * x) + self.p2 * x
+
+
 # for appendix
 @exclude_from_activations
 class SiLUT(SwishT):
@@ -94,8 +257,17 @@ class SiLUT(SwishT):
     @property
     def __name__(self):
         return self.__class__.__name__
-    
 
+@exclude_from_activations
+class SliuT(nn.Module):
+    '''scaled Swish using tanh'''
+    def __init__(self, beta_init=1.0, alpha=0.1,requires_grad=True):
+        super(SliuT, self).__init__()
+        self.beta = nn.Parameter(torch.tensor([beta_init]),requires_grad=requires_grad)  # Learnable parameter
+        self.alpha = alpha  # Could also be made learnable if desired
+
+    def forward(self, x):
+        return x*torch.sigmoid(x)+self.alpha*torch.tanh(self.beta*x)
 
 @exclude_from_activations
 class ASN(NamedModule):
